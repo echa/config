@@ -313,7 +313,7 @@ func (c *Config) GetStringSlice(path string) []string {
 		}
 		return s
 	}
-	return []string{toString(val)}
+	return strings.Split(toString(val), ",")
 }
 
 func (c *Config) GetStringMap(path string) map[string]string {
