@@ -350,6 +350,8 @@ func (c *Config) GetDuration(path string) time.Duration {
 		return time.Duration(v)
 	case uint64:
 		return time.Duration(v)
+	case float64:
+		return time.Duration(int64(v))
 	case string:
 		if dur, err := ParseDuration(v); err == nil {
 			return dur.Duration()
