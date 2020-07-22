@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2018 KIDTSUNAMI
+// Copyright (c) 2013-2020 KIDTSUNAMI
 // Author: alex@kidtsunami.com
 
 package config

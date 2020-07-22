@@ -1,9 +1,6 @@
-// Copyright (c) 2018-2019 KIDTSUNAMI
+// Copyright (c) 2018-2020 KIDTSUNAMI
 // Author: alex@kidtsunami.com
 //
-
-// TODO
-// - support setting slice values from env variables like PREFIX_VAR_0_VALUE=value
 
 package config
 
@@ -169,6 +166,10 @@ func (c *Config) SetEnvPrefix(p string) *Config {
 	return c
 }
 
+func (c *Config) EnvPrefix() string {
+	return c.envPrefix
+}
+
 func (c *Config) UseEnv(enabled bool) *Config {
 	c.noEnv = !enabled
 	return c
@@ -201,6 +202,8 @@ func (c *Config) ReadConfig(buf []byte) error {
 }
 
 func (c *Config) expandEnvKey(key string) string {
+	key = strings.ToUpper(key)
+	key = strings.Replace(key, ".", "_", -1)
 	if c.envPrefix != "" {
 		return c.envPrefix + "_" + key
 	}
@@ -263,8 +266,6 @@ func (c *Config) getEnv(path string) (string, bool) {
 	if c.noEnv {
 		return "", false
 	}
-	path = strings.ToUpper(path)
-	path = strings.Replace(path, ".", "_", -1)
 	return os.LookupEnv(c.expandEnvKey(path))
 }
 
@@ -280,8 +281,10 @@ func (c *Config) getValue(path string) interface{} {
 		}
 	}
 	// get config file data if set
-	if val := getTree(c.data, path); val != nil {
-		return val
+	if c.data != nil {
+		if val := getTree(c.data, path); val != nil {
+			return val
+		}
 	}
 	// get default if registered
 	if val := getTree(defaults, path); val != nil {
@@ -595,14 +598,39 @@ func (c *Config) ForEach(path string, fn func(c *Config) error) error {
 	if !ok {
 		return fmt.Errorf("expected slice of values at path '%s'", path)
 	}
-	for _, v := range slice {
+	for i, v := range slice {
 		err := fn(&Config{
-			noEnv:  true,
-			data:   v.(map[string]interface{}),
-			merged: v.(map[string]interface{}),
+			envPrefix: c.expandEnvKey(path + "." + strconv.Itoa(i)),
+			data:      v.(map[string]interface{}),
+			merged:    v.(map[string]interface{}),
 		})
 		if err != nil {
 			return err
+		}
+	}
+	// search for more env keys starting with `$path_$num`
+	more := len(slice)
+	for {
+		found := false
+		prefix := c.expandEnvKey(path + "." + strconv.Itoa(more))
+		for _, v := range os.Environ() {
+			if !strings.HasPrefix(v, prefix) {
+				continue
+			}
+			err := fn(&Config{
+				envPrefix: prefix,
+				data:      nil,
+				merged:    nil,
+			})
+			if err != nil {
+				return err
+			}
+			found = true
+			more++
+			break
+		}
+		if !found {
+			break
 		}
 	}
 	return nil

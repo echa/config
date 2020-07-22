@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2019 KIDTSUNAMI
+// Copyright (c) 2018-2020 KIDTSUNAMI
 // Author: alex@kidtsunami.com
 //
 // go test -cpuprofile cpu.prof -memprofile mem.prof -bench=. -benchmem
@@ -211,8 +211,15 @@ var testcfg = `{
  	"two": 10,
  	"three": 3.4,
  	"four": "2s",
- 	"five": ["one", "two"]
- }
+ 	"five": ["one", "two"],
+ 	"six": [{
+ 		"idx": 0,
+ 		"value": 10
+ 	},{
+ 		"idx": 1,
+ 		"value": 11
+ 	}]
+  }
 }`
 
 func TestUnmarshal(T *testing.T) {
@@ -239,11 +246,11 @@ func TestUnmarshal(T *testing.T) {
 
 func TestDefaults(T *testing.T) {
 	c := NewConfig()
-	c.SetDefault("test.six", 42)
+	c.SetDefault("test.default", 42)
 	if err := c.ReadConfig([]byte(testcfg)); err != nil {
 		T.Error(err)
 	}
-	if exp, got := int64(42), c.GetInt64("test.six"); exp != got {
+	if exp, got := int64(42), c.GetInt64("test.default"); exp != got {
 		T.Errorf("invalid result: expected=%v got=%v (%[2]T)", exp, got)
 	}
 }
@@ -340,5 +347,54 @@ func TestAllSettingsEnv(T *testing.T) {
 	}
 	if exp, got := newval, l2v; exp != got {
 		T.Errorf("invalid result: expected=%v got=%v (%[2]T)", exp, got)
+	}
+}
+
+func TestForEachFile(T *testing.T) {
+	c := NewConfig()
+	if err := c.ReadConfig([]byte(testcfg)); err != nil {
+		T.Error(err)
+	}
+	num := 0
+	c.ForEach("test.six", func(c *Config) error {
+		if exp, got := int64(num), c.GetInt64("idx"); exp != got {
+			T.Errorf("invalid result: expected=%v got=%v (%[2]T)", exp, got)
+		}
+		if exp, got := int64(num+10), c.GetInt64("value"); exp != got {
+			T.Errorf("invalid result: expected=%v got=%v (%[2]T)", exp, got)
+		}
+		num++
+		return nil
+	})
+	if num != 2 {
+		T.Errorf("invalid result: expected=%v got=%v (%[2]T)", 2, num)
+	}
+}
+
+func TestForEachEnv(T *testing.T) {
+	c := NewConfig()
+	if err := c.ReadConfig([]byte(testcfg)); err != nil {
+		T.Error(err)
+	}
+	c.SetEnvPrefix("TESTPREFIX")
+	if err := os.Setenv("TESTPREFIX_TEST_SIX_2_IDX", "2"); err != nil {
+		T.Error(err)
+	}
+	if err := os.Setenv("TESTPREFIX_TEST_SIX_2_VALUE", "12"); err != nil {
+		T.Error(err)
+	}
+	num := 0
+	c.ForEach("test.six", func(c *Config) error {
+		if exp, got := int64(num), c.GetInt64("idx"); exp != got {
+			T.Errorf("invalid result: expected=%v got=%v (%[2]T)", exp, got)
+		}
+		if exp, got := int64(num+10), c.GetInt64("value"); exp != got {
+			T.Errorf("invalid result: expected=%v got=%v (%[2]T)", exp, got)
+		}
+		num++
+		return nil
+	})
+	if num != 3 {
+		T.Errorf("invalid result: expected=%v got=%v (%[2]T)", 3, num)
 	}
 }
