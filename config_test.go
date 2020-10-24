@@ -91,6 +91,35 @@ func TestStringSlice(T *testing.T) {
 	}
 }
 
+func TestStringMap(T *testing.T) {
+	c := NewConfig()
+	key, val := "test.map", map[string]interface{}{"one": "one", "two": "two"}
+	c.Set(key, val)
+	if exp, got := val, c.GetStringMap(key); len(exp) != len(got) {
+		T.Errorf("invalid result: expected=%#v got=%#v (%[2]T)", exp, got)
+	}
+	key2, val2 := "test.map2", "lonelystring"
+	c.Set(key2, val2)
+	if exp, got := val2, c.GetStringMap(key2); len(got) != 0 {
+		T.Errorf("invalid result: expected=%v got=%v (%[2]T)", exp, got)
+	}
+}
+
+func TestStringMapEnv(T *testing.T) {
+	c := NewConfig()
+	key, val := "test.map", map[string]interface{}{"one": "one", "two": "two"}
+	os.Clearenv()
+	os.Setenv("TEST_MAP_THREE", "three")
+	c.Set(key, val)
+	if exp, got := val, c.GetStringMap(key); len(exp)+1 != len(got) {
+		T.Errorf("invalid result: expected=%#v got=%#v (%[2]T)", exp, got)
+	}
+	if v, ok := c.GetStringMap(key)["three"]; !ok || v != "three" {
+		T.Errorf("invalid result: expected=%v got=%v (%[2]T)", "three", v)
+	}
+	os.Clearenv()
+}
+
 func TestInt(T *testing.T) {
 	c := NewConfig()
 	key, val := "test.int", "10"

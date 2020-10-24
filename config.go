@@ -330,6 +330,24 @@ func (c *Config) GetStringMap(path string) map[string]string {
 			if s := toString(v); s != "" {
 				smap[n] = s
 			}
+			// check if value was overwritten by env
+			if ev, ok := c.getEnv(path + "." + n); ok {
+				smap[n] = ev
+			}
+		}
+		// add extra values from env
+		pfx := c.expandEnvKey(path)
+		for _, v := range os.Environ() {
+			if !strings.HasPrefix(v, pfx) {
+				continue
+			}
+			fields := strings.SplitN(v, "=", 2)
+			key := strings.ToLower(strings.TrimPrefix(fields[0], pfx+"_"))
+			if len(fields) == 2 {
+				smap[strings.TrimPrefix(key, pfx)] = fields[1]
+			} else {
+				smap[strings.TrimPrefix(key, pfx)] = ""
+			}
 		}
 	}
 	return smap
