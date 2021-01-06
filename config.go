@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -122,6 +123,10 @@ func Unmarshal(path string, val interface{}) error {
 
 func ForEach(path string, fn func(c *Config) error) error {
 	return config.ForEach(path, fn)
+}
+
+func Expand(s string) string {
+	return config.Expand(s)
 }
 
 type Config struct {
@@ -266,6 +271,8 @@ func (c *Config) getEnv(path string) (string, bool) {
 	if c.noEnv {
 		return "", false
 	}
+	path = strings.ToUpper(path)
+	path = strings.Replace(path, ".", "_", -1)
 	return os.LookupEnv(c.expandEnvKey(path))
 }
 
@@ -672,4 +679,23 @@ func (c *Config) Unmarshal(path string, val interface{}) error {
 	}
 	buf, _ := json.Marshal(s)
 	return json.Unmarshal(buf, val)
+}
+
+var exp = regexp.MustCompile(`\${(.+?)}`)
+
+// Resolves env/config variables embedded in a string using ${VAR}
+func (c *Config) Expand(s string) string {
+	for _, match := range exp.FindAllStringSubmatch(s, -1) {
+		if len(match) < 2 {
+			continue
+		}
+		path := strings.ToLower(match[1])
+		path = strings.Replace(path, "_", ".", -1)
+		val := c.getValue(path)
+		if val == nil {
+			continue
+		}
+		s = strings.Replace(s, match[0], toString(val), -1)
+	}
+	return s
 }
