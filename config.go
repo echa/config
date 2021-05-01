@@ -221,6 +221,12 @@ func (c *Config) Set(key string, val interface{}) *Config {
 	return c
 }
 
+func (c *Config) Use(val map[string]interface{}) *Config {
+	c.data = val
+	c.merged = nil
+	return c
+}
+
 func (c *Config) SetDefault(key string, val interface{}) *Config {
 	setTree(defaults, key, val)
 	c.merged = nil
