@@ -591,7 +591,7 @@ func (c *Config) AllSettings() map[string]interface{} {
 	json.Unmarshal(buf, &c.merged)
 
 	// extend keys with matching env variables, only if env prefix is set
-	if !c.noEnv && c.envPrefix == "" {
+	if c.noEnv || c.envPrefix == "" {
 		return c.merged
 	}
 
