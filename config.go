@@ -65,6 +65,10 @@ func GetStringMap(path string) map[string]string {
 	return config.GetStringMap(path)
 }
 
+func GetInterface(path string) interface{} {
+	return config.GetInterface(path)
+}
+
 func GetDuration(path string) time.Duration {
 	return config.GetDuration(path)
 }
@@ -366,6 +370,10 @@ func (c *Config) GetStringMap(path string) map[string]string {
 	return smap
 }
 
+func (c *Config) GetInterface(path string) interface{} {
+	return c.getValue(path)
+}
+
 func (c *Config) GetDuration(path string) time.Duration {
 	val := c.getValue(path)
 	if val == nil {
@@ -632,12 +640,16 @@ func (c *Config) ForEach(path string, fn func(c *Config) error) error {
 	for i, v := range slice {
 		err := fn(&Config{
 			envPrefix: c.expandEnvKey(path + "." + strconv.Itoa(i)),
+			noEnv:     c.noEnv,
 			data:      v.(map[string]interface{}),
 			merged:    v.(map[string]interface{}),
 		})
 		if err != nil {
 			return err
 		}
+	}
+	if c.noEnv {
+		return nil
 	}
 	// search for more env keys starting with `$path_$num`
 	more := len(slice)
