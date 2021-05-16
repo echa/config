@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2020 KIDTSUNAMI
+// Copyright (c) 2018-2021 KIDTSUNAMI
 // Author: alex@kidtsunami.com
 //
 
@@ -39,6 +39,10 @@ func SetEnvPrefix(p string) *Config {
 
 func ReadConfigFile() error {
 	return config.ReadConfigFile()
+}
+
+func MustReadConfigFile() error {
+	return config.MustReadConfigFile()
 }
 
 func ReadConfig(buf []byte) error {
@@ -184,12 +188,25 @@ func (c *Config) UseEnv(enabled bool) *Config {
 	return c
 }
 
-func (c *Config) ReadConfigFile() error {
+func (c *Config) MustReadConfigFile() error {
+	return c.ReadConfigFile(true)
+}
+
+func (c *Config) ReadConfigFile(failNonExist ...bool) error {
 	// determine config name from
 	// - local variable
 	// - environment
 	// - fallback: use config.json
 	name := c.ConfigName()
+
+	// be resilient to non existent config file
+	_, err := os.Stat(name)
+	if err != nil {
+		if len(failNonExist) > 0 && failNonExist[0] {
+			return err
+		}
+		return nil
+	}
 
 	// read config file
 	buf, err := ioutil.ReadFile(name)

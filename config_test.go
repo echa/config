@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2020 KIDTSUNAMI
+// Copyright (c) 2018-2021 KIDTSUNAMI
 // Author: alex@kidtsunami.com
 //
 // go test -cpuprofile cpu.prof -memprofile mem.prof -bench=. -benchmem
