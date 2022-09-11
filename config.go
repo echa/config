@@ -16,10 +16,7 @@ import (
 	"time"
 )
 
-var (
-	config   = NewConfig()                  // ReadConfig(), Set()
-	defaults = make(map[string]interface{}) // SetDefault()
-)
+var config = NewConfig() // ReadConfig(), Set()
 
 func ConfigName() string {
 	return config.ConfigName()
@@ -121,8 +118,8 @@ func GetFloat64Slice(path string) []float64 {
 	return config.GetFloat64Slice(path)
 }
 
-func AllSettings() map[string]interface{} {
-	return config.AllSettings()
+func All() map[string]interface{} {
+	return config.All()
 }
 
 func Unmarshal(path string, val interface{}) error {
@@ -143,12 +140,14 @@ type Config struct {
 	noEnv     bool
 	data      map[string]interface{} // read from config file or set
 	merged    map[string]interface{} // merged env, data, defaults
+	defaults  map[string]interface{} // flat 1-level key/value pairs
 }
 
 func NewConfig() *Config {
 	return &Config{
-		data:   make(map[string]interface{}),
-		merged: nil,
+		data:     make(map[string]interface{}),
+		defaults: make(map[string]interface{}),
+		merged:   nil,
 	}
 }
 
@@ -174,7 +173,7 @@ func (c *Config) SetConfigName(name string) *Config {
 }
 
 func (c *Config) SetEnvPrefix(p string) *Config {
-	c.envPrefix = strings.ToUpper(p)
+	c.envPrefix = strings.ToUpper(strings.Replace(p, " ", "_", -1))
 	c.merged = nil
 	return c
 }
@@ -223,7 +222,7 @@ func (c *Config) ReadConfig(buf []byte) error {
 	}
 	c.merged = nil
 	// parse env for any defined value
-	_ = c.AllSettings()
+	_ = c.All()
 	return nil
 }
 
@@ -249,7 +248,7 @@ func (c *Config) Use(val map[string]interface{}) *Config {
 }
 
 func (c *Config) SetDefault(key string, val interface{}) *Config {
-	setTree(defaults, key, val)
+	c.defaults[key] = val // flat
 	c.merged = nil
 	return c
 }
@@ -264,6 +263,29 @@ func setTree(walker map[string]interface{}, key string, val interface{}) {
 				walker[v] = val
 			} else {
 				log.Fatalf("config: cannot set path '%s': %s exists as type %T", key, v, sub)
+			}
+		} else if n < len(keys)-1 {
+			// append subtree
+			sub := make(map[string]interface{})
+			walker[v] = sub
+			walker = sub
+		} else {
+			// append leaf
+			walker[v] = val
+		}
+	}
+}
+
+func setTreeIfEmpty(walker map[string]interface{}, key string, val interface{}) {
+	keys := strings.Split(key, ".")
+	for n, v := range keys {
+		if sub, ok := walker[v]; ok {
+			if submap, ok := sub.(map[string]interface{}); ok {
+				walker = submap
+			} else if n == len(keys)-1 {
+				if _, ok := walker[v]; !ok {
+					walker[v] = val
+				}
 			}
 		} else if n < len(keys)-1 {
 			// append subtree
@@ -321,7 +343,7 @@ func (c *Config) getValue(path string) interface{} {
 		}
 	}
 	// get default if registered
-	if val := getTree(defaults, path); val != nil {
+	if val, ok := c.defaults[path]; ok {
 		return val
 	}
 	return nil
@@ -601,19 +623,20 @@ func (c *Config) GetFloat64Slice(path string) []float64 {
 	return is
 }
 
-func (c *Config) AllSettings() map[string]interface{} {
+func (c *Config) All() map[string]interface{} {
 	if c.merged != nil {
 		return c.merged
 	}
 	c.merged = make(map[string]interface{})
 
-	// copy map pcontents (we use JSON marshaling to simplify this code)
-	buf, _ := json.Marshal(&defaults)
+	// load data map into merged
+	buf, _ := json.Marshal(&c.data)
 	json.Unmarshal(buf, &c.merged)
 
-	// merge data map into defaults (overwrites only values defined in data)
-	buf, _ = json.Marshal(&c.data)
-	json.Unmarshal(buf, &c.merged)
+	// add defaults for missing (nested) keys
+	for key, val := range c.defaults {
+		setTreeIfEmpty(c.merged, key, val)
+	}
 
 	// extend keys with matching env variables, only if env prefix is set
 	if c.noEnv || c.envPrefix == "" {
@@ -633,7 +656,7 @@ func (c *Config) AllSettings() map[string]interface{} {
 
 func (c *Config) ForEach(path string, fn func(c *Config) error) error {
 	// requires merged tree
-	s := c.AllSettings()
+	s := c.All()
 	segs := strings.Split(path, ".")
 	var slice []interface{}
 	for i, v := range segs[:len(segs)-1] {
@@ -698,7 +721,7 @@ func (c *Config) ForEach(path string, fn func(c *Config) error) error {
 
 func (c *Config) Unmarshal(path string, val interface{}) error {
 	// requires merged tree
-	s := c.AllSettings()
+	s := c.All()
 	for _, v := range strings.Split(path, ".") {
 		if s == nil {
 			break

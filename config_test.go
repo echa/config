@@ -318,7 +318,7 @@ func TestAllSettingsFile(T *testing.T) {
 	if err := c.ReadConfig([]byte(testcfg)); err != nil {
 		T.Error(err)
 	}
-	all := c.AllSettings()
+	all := c.All()
 	if all == nil {
 		T.Fatalf("invalid result: nil map for all settings")
 	}
@@ -354,7 +354,7 @@ func TestAllSettingsEnv(T *testing.T) {
 	if err := os.Setenv("TESTPREFIX_TEST_ONE", newval); err != nil {
 		T.Error(err)
 	}
-	all := c.AllSettings()
+	all := c.All()
 	if all == nil {
 		T.Fatalf("invalid result: nil map for all settings")
 	}
