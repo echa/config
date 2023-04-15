@@ -74,6 +74,10 @@ func GetDuration(path string) time.Duration {
 	return config.GetDuration(path)
 }
 
+func GetTime(path string) time.Time {
+	return config.GetTime(path)
+}
+
 func GetBool(path string) bool {
 	return config.GetBool(path)
 }
@@ -438,12 +442,43 @@ func (c *Config) GetDuration(path string) time.Duration {
 			return dur.Duration()
 		}
 	default:
-		s := toString(v)
-		if dur, err := ParseDuration(s); err == nil {
+		if dur, err := ParseDuration(toString(v)); err == nil {
 			return dur.Duration()
 		}
 	}
 	return 0
+}
+
+func (c *Config) GetTime(path string) time.Time {
+	val := c.getValue(path)
+	if val == nil {
+		return time.Time{}
+	}
+	switch v := val.(type) {
+	case time.Time:
+		return v
+	case int:
+		return time.Unix(int64(v), 0)
+	case int32:
+		return time.Unix(int64(v), 0)
+	case uint32:
+		return time.Unix(int64(v), 0)
+	case int64:
+		return time.Unix(int64(v), 0)
+	case uint64:
+		return time.Unix(int64(v), 0)
+	case float64:
+		return time.Unix(int64(v), 0)
+	case string:
+		if tm, err := ParseTime(v); err == nil {
+			return tm
+		}
+	default:
+		if tm, err := ParseTime(toString(v)); err == nil {
+			return tm
+		}
+	}
+	return time.Time{}
 }
 
 func (c *Config) GetBool(path string) bool {

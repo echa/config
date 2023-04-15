@@ -216,6 +216,20 @@ func TestDuration(T *testing.T) {
 	}
 }
 
+func TestTime(T *testing.T) {
+	c := NewConfig()
+	key, val := "test.time", "2023-02-01"
+	c.Set(key, val)
+	if exp, got := time.Date(2023, 2, 1, 0, 0, 0, 0, time.UTC), c.GetTime(key); exp != got {
+		T.Errorf("invalid result: expected=%v got=%v (%[2]T)", exp, got)
+	}
+	key2, val2 := "test.time2", time.Now()
+	c.Set(key2, val2)
+	if exp, got := val2, c.GetTime(key2); exp != got {
+		T.Errorf("invalid result: expected=%v got=%v (%[2]T)", exp, got)
+	}
+}
+
 func TestInterface(T *testing.T) {
 	testcases := map[string]interface{}{
 		"test.one":   "string",
