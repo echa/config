@@ -366,17 +366,18 @@ func (c *Config) GetStringSlice(path string) []string {
 	if val == nil {
 		return []string{}
 	}
-	if stringslice, ok := val.([]string); ok {
-		return stringslice
-	}
-	if vslice, ok := val.([]interface{}); ok {
-		s := make([]string, len(vslice))
-		for i, v := range vslice {
-			s[i] = toString(v)
-		}
+	switch s := val.(type) {
+	case []string:
 		return s
+	case []interface{}:
+		res := make([]string, len(s))
+		for i, v := range s {
+			res[i] = toString(v)
+		}
+		return res
+	default:
+		return strings.Split(toString(val), ",")
 	}
-	return strings.Split(toString(val), ",")
 }
 
 func (c *Config) GetStringMap(path string) map[string]string {
@@ -385,30 +386,31 @@ func (c *Config) GetStringMap(path string) map[string]string {
 	if val == nil {
 		return smap
 	}
-	if m, ok := val.(map[string]interface{}); ok {
+	switch m := val.(type) {
+	case map[string]string:
+		smap = m
+	case map[string]interface{}:
 		for n, v := range m {
 			if s := toString(v); s != "" {
 				smap[n] = s
 			}
-			// check if value was overwritten by env
-			if ev, ok := c.getEnv(path + "." + n); ok {
-				smap[n] = ev
-			}
 		}
-		// add extra values from env
-		pfx := c.expandEnvKey(path)
-		for _, v := range os.Environ() {
-			if !strings.HasPrefix(v, pfx) {
-				continue
-			}
-			fields := strings.SplitN(v, "=", 2)
-			key := strings.ToLower(strings.TrimPrefix(fields[0], pfx+"_"))
-			if len(fields) == 2 {
-				smap[strings.TrimPrefix(key, pfx)] = fields[1]
-			} else {
-				smap[strings.TrimPrefix(key, pfx)] = ""
-			}
+	}
+	// check if value was overwritten by env
+	for n := range smap {
+		if ev, ok := c.getEnv(path + "." + n); ok {
+			smap[n] = ev
 		}
+	}
+	// add extra values from env
+	pfx := c.expandEnvKey(path)
+	for _, v := range os.Environ() {
+		if !strings.HasPrefix(v, pfx) {
+			continue
+		}
+		key, val, _ := strings.Cut(v, "=")
+		key = strings.TrimPrefix(key, pfx+"_")
+		smap[key] = val
 	}
 	return smap
 }
