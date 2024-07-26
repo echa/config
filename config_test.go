@@ -34,9 +34,7 @@ func TestName(T *testing.T) {
 		T.Error(err)
 	}
 	defer os.RemoveAll(f2.Name())
-	if err := os.Setenv("CONFIG_FILE", f2.Name()); err != nil {
-		T.Error(err)
-	}
+	T.Setenv("CONFIG_FILE", f2.Name())
 	if exp, got := f2.Name(), c.ConfigName(); exp != got {
 		T.Errorf("invalid result: expected=%v got=%v (%[2]T)", exp, got)
 	}
@@ -47,9 +45,7 @@ func TestName(T *testing.T) {
 	}
 	defer os.RemoveAll(f3.Name())
 	c.SetEnvPrefix("TESTPREFIX")
-	if err := os.Setenv("TESTPREFIX_CONFIG_FILE", f3.Name()); err != nil {
-		T.Error(err)
-	}
+	T.Setenv("TESTPREFIX_CONFIG_FILE", f3.Name())
 	if exp, got := f3.Name(), c.ConfigName(); exp != got {
 		T.Errorf("invalid result: expected=%v got=%v (%[2]T)", exp, got)
 	}
@@ -270,7 +266,11 @@ var testcfg = `{
  	},{
  		"idx": 1,
  		"value": 11
- 	}]
+ 	}],
+ 	"seven": {
+ 		"seven1": 1,
+ 		"seven2": 2
+ 	}
   }
 }`
 
@@ -327,9 +327,7 @@ func TestEnv(T *testing.T) {
 	}
 	newval := "envstring"
 	c.SetEnvPrefix("TESTPREFIX")
-	if err := os.Setenv("TESTPREFIX_TEST_ONE", newval); err != nil {
-		T.Error(err)
-	}
+	T.Setenv("TESTPREFIX_TEST_ONE", newval)
 	if exp, got := newval, c.GetString("test.one"); exp != got {
 		T.Errorf("invalid result: expected=%v got=%v (%[2]T)", exp, got)
 	}
@@ -374,9 +372,7 @@ func TestAllSettingsEnv(T *testing.T) {
 	}
 	newval := "envstring"
 	c.SetEnvPrefix("TESTPREFIX")
-	if err := os.Setenv("TESTPREFIX_TEST_ONE", newval); err != nil {
-		T.Error(err)
-	}
+	T.Setenv("TESTPREFIX_TEST_ONE", newval)
 	all := c.All()
 	if all == nil {
 		T.Fatalf("invalid result: nil map for all settings")
@@ -429,12 +425,8 @@ func TestForEachEnv(T *testing.T) {
 		T.Error(err)
 	}
 	c.SetEnvPrefix("TESTPREFIX")
-	if err := os.Setenv("TESTPREFIX_TEST_SIX_2_IDX", "2"); err != nil {
-		T.Error(err)
-	}
-	if err := os.Setenv("TESTPREFIX_TEST_SIX_2_VALUE", "12"); err != nil {
-		T.Error(err)
-	}
+	T.Setenv("TESTPREFIX_TEST_SIX_2_IDX", "2")
+	T.Setenv("TESTPREFIX_TEST_SIX_2_VALUE", "12")
 	num := 0
 	c.ForEach("test.six", func(c *Config) error {
 		if exp, got := int64(num), c.GetInt64("idx"); exp != got {
@@ -449,4 +441,60 @@ func TestForEachEnv(T *testing.T) {
 	if num != 3 {
 		T.Errorf("invalid result: expected=%v got=%v (%[2]T)", 3, num)
 	}
+}
+
+func TestBranchEnv(T *testing.T) {
+	c := NewConfig()
+	c.SetDefault("test.seven.seven3", 3)
+	if err := c.ReadConfig([]byte(testcfg)); err != nil {
+		T.Error(err)
+	}
+	c.SetEnvPrefix("TESTPREFIX")
+	T.Setenv("TESTPREFIX_TEST_SEVEN_SEVEN4", "4")
+	branch, err := c.Branch("test.seven")
+	if err != nil {
+		T.Error(err)
+	}
+	if branch == nil {
+		T.Fatalf("invalid result: nil branch")
+	}
+	T.Log(branch)
+	for i, k := range []string{
+		"seven1",
+		"seven2",
+		"seven3",
+		"seven4",
+	} {
+		if exp, got := i+1, branch.GetInt(k); exp != got {
+			T.Errorf("invalid result: expected=%v got=%v (%[2]T)", exp, got)
+		}
+	}
+}
+
+func TestArgsEnv(T *testing.T) {
+	c := NewConfig()
+	c.SetDefault("test.seven.seven3", 3)
+	if err := c.ReadConfig([]byte(testcfg)); err != nil {
+		T.Error(err)
+	}
+	c.SetEnvPrefix("TESTPREFIX")
+	T.Setenv("TESTPREFIX_TEST_SEVEN_SEVEN4", "4")
+	branch, err := c.Branch("test.seven")
+	if err != nil {
+		T.Error(err)
+	}
+	if branch == nil {
+		T.Fatalf("invalid result: nil branch")
+	}
+	T.Log(branch)
+	args := []string{
+		"-test.seven.seven1=1",
+		"-test.seven.seven2=2",
+		"-test.seven.seven3=3",
+		"-test.seven.seven4=4",
+	}
+	if exp, got := args, branch.Args(); !reflect.DeepEqual(exp, got) {
+		T.Errorf("invalid result: expected=%v got=%v (%[2]T)", exp, got)
+	}
+
 }

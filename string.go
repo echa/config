@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 )
 
 var stringerType = reflect.TypeOf((*fmt.Stringer)(nil)).Elem()
@@ -45,7 +46,18 @@ func toRawString(t interface{}) (string, error) {
 		return strconv.FormatBool(val.Bool()), nil
 	case reflect.Array:
 		if typ.Elem().Kind() != reflect.Uint8 {
-			break
+			b := strings.Builder{}
+			for i, l := 0, val.Len(); i < l; i++ {
+				v, err := toRawString(val.Index(i).Interface())
+				if err != nil {
+					return "", err
+				}
+				if b.Len() > 0 {
+					b.WriteByte(',')
+				}
+				b.WriteString(v)
+			}
+			return b.String(), nil
 		}
 		// [...]byte
 		var b []byte
@@ -58,11 +70,42 @@ func toRawString(t interface{}) (string, error) {
 		return hex.EncodeToString(b), nil
 	case reflect.Slice:
 		if typ.Elem().Kind() != reflect.Uint8 {
-			break
+			b := strings.Builder{}
+			for i, l := 0, val.Len(); i < l; i++ {
+				v, err := toRawString(val.Index(i).Interface())
+				if err != nil {
+					return "", err
+				}
+				if b.Len() > 0 {
+					b.WriteByte(',')
+				}
+				b.WriteString(v)
+			}
+			return b.String(), nil
 		}
 		// []byte
 		b := val.Bytes()
 		return hex.EncodeToString(b), nil
+	case reflect.Map:
+		b := strings.Builder{}
+		for _, e := range val.MapKeys() {
+			k, err := toRawString(e.Interface())
+			if err != nil {
+				return "", err
+			}
+			v := val.MapIndex(e)
+			vv, err := toRawString(v.Interface())
+			if err != nil {
+				return "", err
+			}
+			if b.Len() > 0 {
+				b.WriteByte(',')
+			}
+			b.WriteString(k)
+			b.WriteByte('=')
+			b.WriteString(vv)
+		}
+		return b.String(), nil
 	}
 	return "", fmt.Errorf("no method for converting type %s (%v) to string", typ.String(), val.Kind())
 }

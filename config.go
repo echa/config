@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"regexp"
 	"strconv"
@@ -52,6 +51,10 @@ func Set(key string, val any) *Config {
 
 func SetDefault(key string, val any) *Config {
 	return config.SetDefault(key, val)
+}
+
+func Has(path string) bool {
+	return config.Has(path)
 }
 
 func GetString(path string) string {
@@ -134,17 +137,26 @@ func ForEach(path string, fn func(c *Config) error) error {
 	return config.ForEach(path, fn)
 }
 
+func Branch(path string) (*Config, error) {
+	return config.Branch(path)
+}
+
+func Args() []string {
+	return config.Args()
+}
+
 func Expand(s string) string {
 	return config.Expand(s)
 }
 
 type Config struct {
-	confName  string
-	envPrefix string
-	noEnv     bool
-	data      map[string]any // read from config file or set
-	merged    map[string]any // merged env, data, defaults
-	defaults  map[string]any // flat 1-level key/value pairs
+	confName   string
+	envPrefix  string
+	branchName string
+	noEnv      bool
+	data       map[string]any // read from config file or set
+	merged     map[string]any // merged env, data, defaults
+	defaults   map[string]any // flat 1-level key/value pairs
 }
 
 func NewConfig() *Config {
@@ -257,69 +269,6 @@ func (c *Config) SetDefault(key string, val any) *Config {
 	return c
 }
 
-func setTree(walker map[string]any, key string, val any) {
-	keys := strings.Split(key, ".")
-	for n, v := range keys {
-		if sub, ok := walker[v]; ok {
-			if submap, ok := sub.(map[string]any); ok {
-				walker = submap
-			} else if n == len(keys)-1 {
-				walker[v] = val
-			} else {
-				log.Fatalf("config: cannot set path '%s': %s exists as type %T", key, v, sub)
-			}
-		} else if n < len(keys)-1 {
-			// append subtree
-			sub := make(map[string]any)
-			walker[v] = sub
-			walker = sub
-		} else {
-			// append leaf
-			walker[v] = val
-		}
-	}
-}
-
-func setTreeIfEmpty(walker map[string]any, key string, val any) {
-	keys := strings.Split(key, ".")
-	for n, v := range keys {
-		if sub, ok := walker[v]; ok {
-			if submap, ok := sub.(map[string]any); ok {
-				walker = submap
-			} else if n == len(keys)-1 {
-				if _, ok := walker[v]; !ok {
-					walker[v] = val
-				}
-			}
-		} else if n < len(keys)-1 {
-			// append subtree
-			sub := make(map[string]any)
-			walker[v] = sub
-			walker = sub
-		} else {
-			// append leaf
-			walker[v] = val
-		}
-	}
-}
-
-func getTree(walker map[string]any, key string) any {
-	keys := strings.Split(key, ".")
-	for n, v := range keys {
-		if sub, ok := walker[v]; ok {
-			if n == len(keys)-1 {
-				return sub
-			}
-			if submap, ok := sub.(map[string]any); ok {
-				walker = submap
-			} else {
-				break
-			}
-		}
-	}
-	return nil
-}
-
 func (c *Config) getEnv(path string) (string, bool) {
 	if c.noEnv {
 		return "", false
@@ -351,6 +300,11 @@ func (c *Config) getValue(path string) any {
 		return val
 	}
 	return nil
+}
+
+func (c *Config) Has(path string) bool {
+	val := c.getValue(path)
+	return val != nil
 }
 
 func (c *Config) GetString(path string) string {
@@ -706,9 +660,9 @@ func (c *Config) All() map[string]any {
 		if !strings.HasPrefix(v, c.envPrefix) {
 			continue
 		}
-		fields := strings.SplitN(v, "=", 2)
-		key := strings.Join(strings.SplitN(strings.ToLower(fields[0]), "_", 3)[1:], ".")
-		setTree(c.merged, key, fields[1])
+		key, val, _ := strings.Cut(v, "=")
+		key = strings.Join(strings.Split(strings.ToLower(key), "_")[1:], ".")
+		setTree(c.merged, key, val)
 	}
 	return c.merged
 }
@@ -724,17 +678,17 @@ func (c *Config) ForEach(path string, fn func(c *Config) error) error {
 		}
 		sub, ok := s[v]
 		if !ok {
-			return fmt.Errorf("missing config path '%s'", path)
+			return fmt.Errorf("missing config path %q", path)
 		}
 		s, ok = sub.(map[string]any)
 		if !ok && i < len(segs)-1 {
-			return fmt.Errorf("invalid type %T at config path '%s'", sub, path)
+			return fmt.Errorf("invalid type %T at config path %q", sub, path)
 		}
 	}
 	// assuming the last sub-tree element is a slice
 	slice, ok := s[segs[len(segs)-1]].([]any)
 	if !ok {
-		return fmt.Errorf("expected slice of values at path '%s'", path)
+		return fmt.Errorf("expected slice of values at path %q", path)
 	}
 	for i, v := range slice {
 		err := fn(&Config{
@@ -778,6 +732,53 @@ func (c *Config) ForEach(path string, fn func(c *Config) error) error {
 	return nil
 }
 
+func (c *Config) Branch(path string) (*Config, error) {
+	// requires merged tree
+	s := c.All()
+	segs := strings.Split(path, ".") // path segments
+	for i, v := range segs {
+		if s == nil {
+			break
+		}
+		sub, ok := s[v]
+		if !ok {
+			return nil, fmt.Errorf("missing config path %q", path)
+		}
+		s, ok = sub.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("invalid type %T at config path %q pos %d", sub, path, i)
+		}
+	}
+	fmt.Printf("path=%s sub=%v\n", path, s)
+	cp := make(map[string]any)
+	for n, v := range s {
+		cp[n] = v
+	}
+	branch := &Config{
+		envPrefix:  c.expandEnvKey(strings.Join(segs[:len(segs)-1], ".")),
+		branchName: path,
+		noEnv:      c.noEnv,
+		data:       cp,
+		merged:     cp,
+	}
+	return branch, nil
+}
+
+func (c *Config) Args() []string {
+	args := make([]string, 0)
+	_ = walkTree(c.All(), "", func(key, val string) error {
+		if c.branchName != "" {
+			key = c.branchName + "." + key
+		}
+		if val != "" {
+			val = "=" + val
+		}
+		args = append(args, "-"+key+val)
+		return nil
+	})
+	return args
+}
+
 func (c *Config) Unmarshal(path string, val any) error {
 	// requires merged tree
 	s := c.All()
@@ -787,11 +788,11 @@ func (c *Config) Unmarshal(path string, val any) error {
 		}
 		sub, ok := s[v]
 		if !ok {
-			return fmt.Errorf("missing config path '%s'", path)
+			return fmt.Errorf("missing config path %q", path)
 		}
 		s, ok = sub.(map[string]any)
 		if !ok {
-			return fmt.Errorf("invalid type %T at config path '%s'", sub, path)
+			return fmt.Errorf("invalid type %T at config path %q", sub, path)
 		}
 	}
 	buf, _ := json.Marshal(s)
