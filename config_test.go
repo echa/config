@@ -8,6 +8,7 @@ package config
 import (
 	"io/ioutil"
 	"os"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -98,26 +99,34 @@ func TestStringMap(T *testing.T) {
 	if exp, got := val, c.GetStringMap(key); len(exp) != len(got) {
 		T.Errorf("invalid result: expected=%#v got=%#v (%[2]T)", exp, got)
 	}
-	key2, val2 := "test.map2", "lonelystring"
+	key2, val2 := "test.map2", map[string]string{"lonelystring": "true"}
 	c.Set(key2, val2)
-	if exp, got := val2, c.GetStringMap(key2); len(got) != 0 {
+	if exp, got := val2, c.GetStringMap(key2); !reflect.DeepEqual(exp, got) {
+		T.Errorf("invalid result: expected=%v got=%v (%[2]T)", exp, got)
+	}
+	key3, val3 := "test.map3", "single"
+	c.Set(key3, val3)
+	if exp, got := map[string]string{"single": "true"}, c.GetStringMap(key3); !reflect.DeepEqual(exp, got) {
+		T.Errorf("invalid result: expected=%v got=%v (%[2]T)", exp, got)
+	}
+	key4, val4 := "test.map4", "key=val"
+	c.Set(key4, val4)
+	if exp, got := map[string]string{"key": "val"}, c.GetStringMap(key4); !reflect.DeepEqual(exp, got) {
 		T.Errorf("invalid result: expected=%v got=%v (%[2]T)", exp, got)
 	}
 }
 
 func TestStringMapEnv(T *testing.T) {
 	c := NewConfig()
-	key, val := "test.map", map[string]interface{}{"one": "one", "two": "two"}
-	os.Clearenv()
-	os.Setenv("TEST_MAP_THREE", "three")
+	key, val := "test.map", map[string]string{"one": "one", "two": "two"}
+	T.Setenv("TEST_MAP_THREE", "three")
 	c.Set(key, val)
-	if exp, got := val, c.GetStringMap(key); len(exp)+1 != len(got) {
+	if exp, got := val, c.GetStringMap(key); !reflect.DeepEqual(exp, got) {
 		T.Errorf("invalid result: expected=%#v got=%#v (%[2]T)", exp, got)
 	}
 	if v, ok := c.GetStringMap(key)["three"]; !ok || v != "three" {
 		T.Errorf("invalid result: expected=%v got=%v (%[2]T)", "three", v)
 	}
-	os.Clearenv()
 }
 
 func TestInt(T *testing.T) {

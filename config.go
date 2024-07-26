@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2021 KIDTSUNAMI
+// Copyright (c) 2018-2024 KIDTSUNAMI
 // Author: alex@kidtsunami.com
 //
 
@@ -46,11 +46,11 @@ func ReadConfig(buf []byte) error {
 	return config.ReadConfig(buf)
 }
 
-func Set(key string, val interface{}) *Config {
+func Set(key string, val any) *Config {
 	return config.Set(key, val)
 }
 
-func SetDefault(key string, val interface{}) *Config {
+func SetDefault(key string, val any) *Config {
 	return config.SetDefault(key, val)
 }
 
@@ -66,7 +66,7 @@ func GetStringMap(path string) map[string]string {
 	return config.GetStringMap(path)
 }
 
-func GetInterface(path string) interface{} {
+func GetInterface(path string) any {
 	return config.GetInterface(path)
 }
 
@@ -122,11 +122,11 @@ func GetFloat64Slice(path string) []float64 {
 	return config.GetFloat64Slice(path)
 }
 
-func All() map[string]interface{} {
+func All() map[string]any {
 	return config.All()
 }
 
-func Unmarshal(path string, val interface{}) error {
+func Unmarshal(path string, val any) error {
 	return config.Unmarshal(path, val)
 }
 
@@ -142,15 +142,15 @@ type Config struct {
 	confName  string
 	envPrefix string
 	noEnv     bool
-	data      map[string]interface{} // read from config file or set
-	merged    map[string]interface{} // merged env, data, defaults
-	defaults  map[string]interface{} // flat 1-level key/value pairs
+	data      map[string]any // read from config file or set
+	merged    map[string]any // merged env, data, defaults
+	defaults  map[string]any // flat 1-level key/value pairs
 }
 
 func NewConfig() *Config {
 	return &Config{
-		data:     make(map[string]interface{}),
-		defaults: make(map[string]interface{}),
+		data:     make(map[string]any),
+		defaults: make(map[string]any),
 		merged:   nil,
 	}
 }
@@ -239,29 +239,29 @@ func (c *Config) expandEnvKey(key string) string {
 	return key
 }
 
-func (c *Config) Set(key string, val interface{}) *Config {
+func (c *Config) Set(key string, val any) *Config {
 	setTree(c.data, key, val)
 	c.merged = nil
 	return c
 }
 
-func (c *Config) Use(val map[string]interface{}) *Config {
+func (c *Config) Use(val map[string]any) *Config {
 	c.data = val
 	c.merged = nil
 	return c
 }
 
-func (c *Config) SetDefault(key string, val interface{}) *Config {
+func (c *Config) SetDefault(key string, val any) *Config {
 	c.defaults[key] = val // flat
 	c.merged = nil
 	return c
 }
 
-func setTree(walker map[string]interface{}, key string, val interface{}) {
+func setTree(walker map[string]any, key string, val any) {
 	keys := strings.Split(key, ".")
 	for n, v := range keys {
 		if sub, ok := walker[v]; ok {
-			if submap, ok := sub.(map[string]interface{}); ok {
+			if submap, ok := sub.(map[string]any); ok {
 				walker = submap
 			} else if n == len(keys)-1 {
 				walker[v] = val
@@ -270,7 +270,7 @@ func setTree(walker map[string]interface{}, key string, val interface{}) {
 			}
 		} else if n < len(keys)-1 {
 			// append subtree
-			sub := make(map[string]interface{})
+			sub := make(map[string]any)
 			walker[v] = sub
 			walker = sub
 		} else {
@@ -280,11 +280,11 @@ func setTree(walker map[string]interface{}, key string, val interface{}) {
 	}
 }
 
-func setTreeIfEmpty(walker map[string]interface{}, key string, val interface{}) {
+func setTreeIfEmpty(walker map[string]any, key string, val any) {
 	keys := strings.Split(key, ".")
 	for n, v := range keys {
 		if sub, ok := walker[v]; ok {
-			if submap, ok := sub.(map[string]interface{}); ok {
+			if submap, ok := sub.(map[string]any); ok {
 				walker = submap
 			} else if n == len(keys)-1 {
 				if _, ok := walker[v]; !ok {
@@ -293,7 +293,7 @@ func setTreeIfEmpty(walker map[string]interface{}, key string, val interface{}) 
 			}
 		} else if n < len(keys)-1 {
 			// append subtree
-			sub := make(map[string]interface{})
+			sub := make(map[string]any)
 			walker[v] = sub
 			walker = sub
 		} else {
@@ -303,14 +303,14 @@ func setTreeIfEmpty(walker map[string]interface{}, key string, val interface{}) 
 	}
 }
 
-func getTree(walker map[string]interface{}, key string) interface{} {
+func getTree(walker map[string]any, key string) any {
 	keys := strings.Split(key, ".")
 	for n, v := range keys {
 		if sub, ok := walker[v]; ok {
 			if n == len(keys)-1 {
 				return sub
 			}
-			if submap, ok := sub.(map[string]interface{}); ok {
+			if submap, ok := sub.(map[string]any); ok {
 				walker = submap
 			} else {
 				break
@@ -329,7 +329,7 @@ func (c *Config) getEnv(path string) (string, bool) {
 	return os.LookupEnv(c.expandEnvKey(path))
 }
 
-func (c *Config) getValue(path string) interface{} {
+func (c *Config) getValue(path string) any {
 	// get env key when present (allows to overwrite with empty value)
 	if val, ok := c.getEnv(path); ok {
 		return val
@@ -369,7 +369,7 @@ func (c *Config) GetStringSlice(path string) []string {
 	switch s := val.(type) {
 	case []string:
 		return s
-	case []interface{}:
+	case []any:
 		res := make([]string, len(s))
 		for i, v := range s {
 			res[i] = toString(v)
@@ -389,10 +389,31 @@ func (c *Config) GetStringMap(path string) map[string]string {
 	switch m := val.(type) {
 	case map[string]string:
 		smap = m
-	case map[string]interface{}:
-		for n, v := range m {
+	case map[string]any:
+		for k, v := range m {
+			k = strings.ToLower(k)
 			if s := toString(v); s != "" {
-				smap[n] = s
+				smap[k] = s
+			}
+		}
+	case []string:
+		for _, v := range m {
+			k, v, ok := strings.Cut(v, "=")
+			k = strings.ToLower(k)
+			if ok {
+				smap[k] = v
+			} else {
+				smap[k] = "true"
+			}
+		}
+	case string:
+		for _, v := range strings.Split(m, ",") {
+			k, v, ok := strings.Cut(v, "=")
+			k = strings.ToLower(k)
+			if ok {
+				smap[k] = v
+			} else {
+				smap[k] = "true"
 			}
 		}
 	}
@@ -408,14 +429,15 @@ func (c *Config) GetStringMap(path string) map[string]string {
 		if !strings.HasPrefix(v, pfx) {
 			continue
 		}
-		key, val, _ := strings.Cut(v, "=")
-		key = strings.TrimPrefix(key, pfx+"_")
-		smap[key] = val
+		k, v, _ := strings.Cut(v, "=")
+		k = strings.TrimPrefix(k, pfx+"_")
+		k = strings.ToLower(k)
+		smap[k] = v
 	}
 	return smap
 }
 
-func (c *Config) GetInterface(path string) interface{} {
+func (c *Config) GetInterface(path string) any {
 	return c.getValue(path)
 }
 
@@ -660,11 +682,11 @@ func (c *Config) GetFloat64Slice(path string) []float64 {
 	return is
 }
 
-func (c *Config) All() map[string]interface{} {
+func (c *Config) All() map[string]any {
 	if c.merged != nil {
 		return c.merged
 	}
-	c.merged = make(map[string]interface{})
+	c.merged = make(map[string]any)
 
 	// load data map into merged
 	buf, _ := json.Marshal(&c.data)
@@ -695,7 +717,7 @@ func (c *Config) ForEach(path string, fn func(c *Config) error) error {
 	// requires merged tree
 	s := c.All()
 	segs := strings.Split(path, ".")
-	var slice []interface{}
+	var slice []any
 	for i, v := range segs[:len(segs)-1] {
 		if s == nil {
 			break
@@ -704,13 +726,13 @@ func (c *Config) ForEach(path string, fn func(c *Config) error) error {
 		if !ok {
 			return fmt.Errorf("missing config path '%s'", path)
 		}
-		s, ok = sub.(map[string]interface{})
+		s, ok = sub.(map[string]any)
 		if !ok && i < len(segs)-1 {
 			return fmt.Errorf("invalid type %T at config path '%s'", sub, path)
 		}
 	}
 	// assuming the last sub-tree element is a slice
-	slice, ok := s[segs[len(segs)-1]].([]interface{})
+	slice, ok := s[segs[len(segs)-1]].([]any)
 	if !ok {
 		return fmt.Errorf("expected slice of values at path '%s'", path)
 	}
@@ -718,8 +740,8 @@ func (c *Config) ForEach(path string, fn func(c *Config) error) error {
 		err := fn(&Config{
 			envPrefix: c.expandEnvKey(path + "." + strconv.Itoa(i)),
 			noEnv:     c.noEnv,
-			data:      v.(map[string]interface{}),
-			merged:    v.(map[string]interface{}),
+			data:      v.(map[string]any),
+			merged:    v.(map[string]any),
 		})
 		if err != nil {
 			return err
@@ -756,7 +778,7 @@ func (c *Config) ForEach(path string, fn func(c *Config) error) error {
 	return nil
 }
 
-func (c *Config) Unmarshal(path string, val interface{}) error {
+func (c *Config) Unmarshal(path string, val any) error {
 	// requires merged tree
 	s := c.All()
 	for _, v := range strings.Split(path, ".") {
@@ -767,7 +789,7 @@ func (c *Config) Unmarshal(path string, val interface{}) error {
 		if !ok {
 			return fmt.Errorf("missing config path '%s'", path)
 		}
-		s, ok = sub.(map[string]interface{})
+		s, ok = sub.(map[string]any)
 		if !ok {
 			return fmt.Errorf("invalid type %T at config path '%s'", sub, path)
 		}
