@@ -749,7 +749,6 @@ func (c *Config) Branch(path string) (*Config, error) {
 			return nil, fmt.Errorf("invalid type %T at config path %q pos %d", sub, path, i)
 		}
 	}
-	fmt.Printf("path=%s sub=%v\n", path, s)
 	cp := make(map[string]any)
 	for n, v := range s {
 		cp[n] = v
