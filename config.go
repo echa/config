@@ -238,7 +238,7 @@ func (c *Config) ReadConfig(buf []byte) error {
 	}
 	c.merged = nil
 	// parse env for any defined value
-	_ = c.All()
+	c.merge()
 	return nil
 }
 
@@ -636,10 +636,19 @@ func (c *Config) GetFloat64Slice(path string) []float64 {
 	return is
 }
 
+func (c *Config) Reapply() {
+	c.merged = nil
+	_ = c.merge()
+}
+
 func (c *Config) All() map[string]any {
-	if c.merged != nil {
-		return c.merged
+	if c.merged == nil {
+		c.merge()
 	}
+	return c.merged
+}
+
+func (c *Config) merge() map[string]any {
 	c.merged = make(map[string]any)
 
 	// load data map into merged
