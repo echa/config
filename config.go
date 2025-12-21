@@ -1,29 +1,21 @@
-// Copyright (c) 2018-2024 KIDTSUNAMI
+// Copyright (c) 2018-2025 KIDTSUNAMI
 // Author: alex@kidtsunami.com
-//
 
 package config
 
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"path/filepath"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+	"go.yaml.in/yaml/v4"
 )
 
-var config = NewConfig() // ReadConfig(), Set()
-
-func ConfigName() string {
-	return config.ConfigName()
-}
-
-func SetConfigName(name string) *Config {
-	return config.SetConfigName(name)
-}
+var config = NewConfig()
 
 func UseEnv(enabled bool) *Config {
 	return config.UseEnv(enabled)
@@ -33,16 +25,8 @@ func SetEnvPrefix(p string) *Config {
 	return config.SetEnvPrefix(p)
 }
 
-func ReadConfigFile() error {
-	return config.ReadConfigFile()
-}
-
-func MustReadConfigFile() error {
-	return config.MustReadConfigFile()
-}
-
-func ReadConfig(buf []byte) error {
-	return config.ReadConfig(buf)
+func ReadConfigFile(name string, failNonExist bool) error {
+	return config.ReadConfigFile(name, failNonExist)
 }
 
 func Set(key string, val any) *Config {
@@ -150,7 +134,6 @@ func Expand(s string) string {
 }
 
 type Config struct {
-	confName   string
 	envPrefix  string
 	branchName string
 	noEnv      bool
@@ -172,22 +155,6 @@ func canAccess(name string) bool {
 	return err == nil && !s.IsDir()
 }
 
-func (c *Config) ConfigName() string {
-	name := c.confName
-	if name == "" || !canAccess(name) {
-		name = os.Getenv(c.expandEnvKey("CONFIG_FILE"))
-	}
-	if name == "" || !canAccess(name) {
-		name = "config.json"
-	}
-	return name
-}
-
-func (c *Config) SetConfigName(name string) *Config {
-	c.confName = name
-	return c
-}
-
 func (c *Config) SetEnvPrefix(p string) *Config {
 	c.envPrefix = strings.ToUpper(strings.Replace(p, " ", "_", -1))
 	c.merged = nil
@@ -203,17 +170,7 @@ func (c *Config) UseEnv(enabled bool) *Config {
 	return c
 }
 
-func (c *Config) MustReadConfigFile() error {
-	return c.ReadConfigFile(true)
-}
-
-func (c *Config) ReadConfigFile(failNonExist ...bool) error {
-	// determine config name from
-	// - local variable
-	// - environment
-	// - fallback: use config.json
-	name := c.ConfigName()
-
+func (c *Config) ReadConfigFile(name string, failNonExist ...bool) error {
 	// be resilient to non existent config file
 	_, err := os.Stat(name)
 	if err != nil {
@@ -224,23 +181,45 @@ func (c *Config) ReadConfigFile(failNonExist ...bool) error {
 	}
 
 	// read config file
-	buf, err := ioutil.ReadFile(name)
+	buf, err := os.ReadFile(name)
 	if err != nil {
 		return fmt.Errorf("reading config file: %v", err)
 	}
-	return c.ReadConfig(buf)
+
+
+	switch ext := filepath.Ext(name); ext {
+	case ".json":
+		// unpack config from JSON into Go map
+		return c.ReadJSON(buf)
+	case ".yaml", ".yml":
+		// unpack config from JSON into Go map
+		return c.ReadYAML(buf)
+	default:
+		return fmt.Errorf("unsupported file extension %q", ext)
+	}
 }
 
-func (c *Config) ReadConfig(buf []byte) error {
-	// unpack config from JSON into Go map
-	if err := json.Unmarshal(buf, &c.data); err != nil {
-		return fmt.Errorf("parsing config file: %v", err)
+func (c *Config) ReadJSON(buf []byte) error {
+	err := json.Unmarshal(buf, &c.data)
+	if err != nil {
+		return err
 	}
 	c.merged = nil
-	// parse env for any defined value
 	c.merge()
 	return nil
 }
+
+
+func (c *Config) ReadYAML(buf []byte) error {
+	err := yaml.Unmarshal(buf, &c.data)
+	if err != nil {
+		return err
+	}
+	c.merged = nil
+	c.merge()
+	return nil
+}
+
 
 func (c *Config) expandEnvKey(key string) string {
 	key = strings.ToUpper(key)

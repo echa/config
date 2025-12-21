@@ -7,6 +7,8 @@ package config
 import (
 	"strconv"
 	"strings"
+	"maps"
+	"slices"
 )
 
 func setTree(walker map[string]any, key string, val any) {
@@ -94,8 +96,8 @@ func getTree(walker map[string]any, key string) any {
 }
 
 func walkTree(tree map[string]any, prefix string, fn func(key, val string) error) (err error) {
-	for n, v := range tree {
-		key := n
+	for _, key := range slices.Sorted(maps.Keys(tree)) {
+		v := tree[key]
 		if prefix != "" {
 			key = prefix + "." + key
 		}

@@ -11,20 +11,26 @@ import (
 	"strings"
 )
 
-var stringerType = reflect.TypeOf((*fmt.Stringer)(nil)).Elem()
+type Stringer interface {
+	String() string
+}
 
-func toString(t interface{}) string {
-	val := reflect.Indirect(reflect.ValueOf(t))
-	if !val.IsValid() {
-		return ""
+func toString(t any) string {
+	switch v := t.(type) {
+	case Stringer:
+		return v.String()
+	case string:
+		return v
+	case *string:
+		return *v
+	case []byte:
+		return string(v)
+	default:
+		if s, err := toRawString(t); err == nil {
+			return s
+		}
+		return fmt.Sprintf("%v", t)
 	}
-	if val.Type().Implements(stringerType) {
-		return t.(fmt.Stringer).String()
-	}
-	if s, err := toRawString(val.Interface()); err == nil {
-		return s
-	}
-	return fmt.Sprintf("%v", val.Interface())
 }
 
 func toRawString(t interface{}) (string, error) {

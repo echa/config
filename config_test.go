@@ -1,55 +1,13 @@
-// Copyright (c) 2018-2021 KIDTSUNAMI
+// Copyright (c) 2018-2025 KIDTSUNAMI
 // Author: alex@kidtsunami.com
-//
-// go test -cpuprofile cpu.prof -memprofile mem.prof -bench=. -benchmem
 
 package config
 
 import (
-	"io/ioutil"
-	"os"
 	"reflect"
 	"testing"
 	"time"
 )
-
-func TestName(T *testing.T) {
-	c := NewConfig()
-	if exp, got := "config.json", c.ConfigName(); exp != got {
-		T.Errorf("invalid result: expected=%v got=%v (%[2]T)", exp, got)
-	}
-	f1, err := ioutil.TempFile("", "testconfig.json")
-	if err != nil {
-		T.Error(err)
-	}
-	defer os.RemoveAll(f1.Name())
-	c.SetConfigName(f1.Name())
-	if exp, got := f1.Name(), c.ConfigName(); exp != got {
-		T.Errorf("invalid result: expected=%v got=%v (%[2]T)", exp, got)
-	}
-	c.SetConfigName("")
-
-	f2, err := ioutil.TempFile("", "testconfig.json")
-	if err != nil {
-		T.Error(err)
-	}
-	defer os.RemoveAll(f2.Name())
-	T.Setenv("CONFIG_FILE", f2.Name())
-	if exp, got := f2.Name(), c.ConfigName(); exp != got {
-		T.Errorf("invalid result: expected=%v got=%v (%[2]T)", exp, got)
-	}
-
-	f3, err := ioutil.TempFile("", "env_with_prefix.json")
-	if err != nil {
-		T.Error(err)
-	}
-	defer os.RemoveAll(f3.Name())
-	c.SetEnvPrefix("TESTPREFIX")
-	T.Setenv("TESTPREFIX_CONFIG_FILE", f3.Name())
-	if exp, got := f3.Name(), c.ConfigName(); exp != got {
-		T.Errorf("invalid result: expected=%v got=%v (%[2]T)", exp, got)
-	}
-}
 
 func TestString(T *testing.T) {
 	c := NewConfig()
@@ -253,7 +211,7 @@ func TestInterface(T *testing.T) {
 	}
 }
 
-var testcfg = `{
+var jsoncfg = `{
  "test": {
  	"one": "string",
  	"two": 10,
@@ -274,9 +232,51 @@ var testcfg = `{
   }
 }`
 
-func TestUnmarshal(T *testing.T) {
+var yamlcfg = `
+test:
+  one: string
+  two: 10
+  three: 3.4
+  four: 2s
+  five:
+    - one
+    - two
+  six:
+    - idx: 0,
+      value: 10
+    - idx: 1
+      value: 11
+  seven:
+    seven1: 1
+    seven2: 2
+`
+
+
+func TestJSON(T *testing.T) {
 	c := NewConfig()
-	if err := c.ReadConfig([]byte(testcfg)); err != nil {
+	if err := c.ReadJSON([]byte(jsoncfg)); err != nil {
+		T.Error(err)
+	}
+	if exp, got := "string", c.GetString("test.one"); exp != got {
+		T.Errorf("invalid result: expected=%v got=%v (%[2]T)", exp, got)
+	}
+	if exp, got := int64(10), c.GetInt64("test.two"); exp != got {
+		T.Errorf("invalid result: expected=%v got=%v (%[2]T)", exp, got)
+	}
+	if exp, got := 3.4, c.GetFloat64("test.three"); exp != got {
+		T.Errorf("invalid result: expected=%v got=%v (%[2]T)", exp, got)
+	}
+	if exp, got := 2*time.Second, c.GetDuration("test.four"); exp != got {
+		T.Errorf("invalid result: expected=%v got=%v (%[2]T)", exp, got)
+	}
+	if exp, got := []string{"one", "two"}, c.GetStringSlice("test.five"); len(exp) != len(got) {
+		T.Errorf("invalid result: expected=%v got=%v (%[2]T)", exp, got)
+	}
+}
+
+func TestYAML(T *testing.T) {
+	c := NewConfig()
+	if err := c.ReadYAML([]byte(yamlcfg)); err != nil {
 		T.Error(err)
 	}
 	if exp, got := "string", c.GetString("test.one"); exp != got {
@@ -299,7 +299,7 @@ func TestUnmarshal(T *testing.T) {
 func TestDefaults(T *testing.T) {
 	c := NewConfig()
 	c.SetDefault("test.default", 42)
-	if err := c.ReadConfig([]byte(testcfg)); err != nil {
+	if err := c.ReadJSON([]byte(jsoncfg)); err != nil {
 		T.Error(err)
 	}
 	if exp, got := int64(42), c.GetInt64("test.default"); exp != got {
@@ -309,7 +309,7 @@ func TestDefaults(T *testing.T) {
 
 func TestSet(T *testing.T) {
 	c := NewConfig()
-	if err := c.ReadConfig([]byte(testcfg)); err != nil {
+	if err := c.ReadJSON([]byte(jsoncfg)); err != nil {
 		T.Error(err)
 	}
 	newval := "otherstring"
@@ -322,7 +322,7 @@ func TestSet(T *testing.T) {
 func TestEnv(T *testing.T) {
 	c := NewConfig()
 	c.SetDefault("test.one", "defaultstring")
-	if err := c.ReadConfig([]byte(testcfg)); err != nil {
+	if err := c.ReadJSON([]byte(jsoncfg)); err != nil {
 		T.Error(err)
 	}
 	newval := "envstring"
@@ -336,7 +336,7 @@ func TestEnv(T *testing.T) {
 func TestAllSettingsFile(T *testing.T) {
 	c := NewConfig()
 	c.SetDefault("test.one", "defaultstring")
-	if err := c.ReadConfig([]byte(testcfg)); err != nil {
+	if err := c.ReadJSON([]byte(jsoncfg)); err != nil {
 		T.Error(err)
 	}
 	all := c.All()
@@ -367,7 +367,7 @@ func TestAllSettingsFile(T *testing.T) {
 func TestAllSettingsEnv(T *testing.T) {
 	c := NewConfig()
 	c.SetDefault("test.one", "defaultstring")
-	if err := c.ReadConfig([]byte(testcfg)); err != nil {
+	if err := c.ReadJSON([]byte(jsoncfg)); err != nil {
 		T.Error(err)
 	}
 	newval := "envstring"
@@ -400,7 +400,7 @@ func TestAllSettingsEnv(T *testing.T) {
 
 func TestForEachFile(T *testing.T) {
 	c := NewConfig()
-	if err := c.ReadConfig([]byte(testcfg)); err != nil {
+	if err := c.ReadJSON([]byte(jsoncfg)); err != nil {
 		T.Error(err)
 	}
 	num := 0
@@ -421,7 +421,7 @@ func TestForEachFile(T *testing.T) {
 
 func TestForEachEnv(T *testing.T) {
 	c := NewConfig()
-	if err := c.ReadConfig([]byte(testcfg)); err != nil {
+	if err := c.ReadJSON([]byte(jsoncfg)); err != nil {
 		T.Error(err)
 	}
 	c.SetEnvPrefix("TESTPREFIX")
@@ -446,7 +446,7 @@ func TestForEachEnv(T *testing.T) {
 func TestBranchEnv(T *testing.T) {
 	c := NewConfig()
 	c.SetDefault("test.seven.seven3", 3)
-	if err := c.ReadConfig([]byte(testcfg)); err != nil {
+	if err := c.ReadJSON([]byte(jsoncfg)); err != nil {
 		T.Error(err)
 	}
 	c.SetEnvPrefix("TESTPREFIX")
@@ -474,7 +474,7 @@ func TestBranchEnv(T *testing.T) {
 func TestArgsEnv(T *testing.T) {
 	c := NewConfig()
 	c.SetDefault("test.seven.seven3", 3)
-	if err := c.ReadConfig([]byte(testcfg)); err != nil {
+	if err := c.ReadJSON([]byte(jsoncfg)); err != nil {
 		T.Error(err)
 	}
 	c.SetEnvPrefix("TESTPREFIX")
